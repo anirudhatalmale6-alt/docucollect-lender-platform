@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DocuCollect — Lender Console</title>
+<style>
+  :root { --brand:#2563eb; --bg:#0f172a; --panel:#fff; --ink:#0f172a; --muted:#64748b; --line:#e2e8f0; --ok:#16a34a; --warn:#d97706; --bad:#dc2626; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:#f1f5f9; }
+  header { background:var(--bg); color:#fff; padding:14px 22px; display:flex; align-items:center; gap:12px; }
+  header .logo { width:30px;height:30px;border-radius:8px;background:var(--brand);display:grid;place-items:center;font-weight:800; }
+  header h1 { font-size:16px; margin:0; font-weight:700; letter-spacing:.2px; }
+  header .who { margin-left:auto; font-size:13px; color:#cbd5e1; }
+  .wrap { max-width:1120px; margin:22px auto; padding:0 18px; display:grid; grid-template-columns:260px 1fr; gap:20px; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:16px; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.6px; color:var(--muted); margin:0 0 12px; }
+  button { background:var(--brand); color:#fff; border:0; padding:9px 14px; border-radius:8px; font-weight:600; cursor:pointer; font-size:14px; }
+  button.ghost { background:#eef2ff; color:var(--brand); }
+  button.sm { padding:5px 10px; font-size:12.5px; }
+  button.ok { background:var(--ok); } button.bad { background:var(--bad); }
+  input, select, textarea { width:100%; padding:9px 10px; border:1px solid var(--line); border-radius:8px; font-size:14px; margin:4px 0 10px; font-family:inherit; }
+  label { font-size:12.5px; font-weight:600; color:#334155; }
+  .row { display:flex; gap:8px; align-items:center; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:left; padding:9px 8px; border-bottom:1px solid var(--line); }
+  th { font-size:11.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); }
+  .pill { display:inline-block; padding:2px 9px; border-radius:999px; font-size:12px; font-weight:600; }
+  .p-open { background:#eff6ff; color:#1d4ed8; } .p-completed { background:#f0fdf4; color:#15803d; }
+  .p-pending { background:#f8fafc; color:#64748b; } .p-uploaded { background:#fff7ed; color:#b45309; }
+  .p-accepted { background:#f0fdf4; color:#15803d; } .p-rejected { background:#fef2f2; color:#b91c1c; }
+  .muted { color:var(--muted); font-size:13px; }
+  .bar { height:7px; background:#e2e8f0; border-radius:99px; overflow:hidden; }
+  .bar > i { display:block; height:100%; background:var(--ok); }
+  .hide { display:none !important; }
+  .stack > * + * { margin-top:10px; }
+  .item { border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin-bottom:9px; }
+  .linkbox { background:#f8fafc; border:1px dashed #cbd5e1; padding:10px; border-radius:8px; font-size:13px; word-break:break-all; }
+  .tabs { display:flex; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+  .tabs button { background:#e2e8f0; color:#334155; }
+  .tabs button.active { background:var(--brand); color:#fff; }
+  .center { min-height:70vh; display:grid; place-items:center; }
+  .auth { width:360px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">D</div>
+  <h1>DocuCollect <span style="opacity:.6;font-weight:500">· Lender Console</span></h1>
+  <div class="who" id="who"></div>
+</header>
+
+<!-- AUTH -->
+<div id="authView" class="center">
+  <div class="card auth">
+    <div class="tabs">
+      <button id="tabLogin" class="active" onclick="showAuth('login')">Log in</button>
+      <button id="tabSignup" onclick="showAuth('signup')">Create organization</button>
+    </div>
+    <div id="signupForm" class="hide stack">
+      <div><label>Organization name</label><input id="su_org" placeholder="Acme Lending"></div>
+      <div><label>Brand color</label><input id="su_color" type="color" value="#2563eb" style="height:38px;padding:2px"></div>
+      <div><label>Your name</label><input id="su_name" placeholder="Jane Doe"></div>
+      <div><label>Email</label><input id="su_email" type="email" placeholder="jane@acme.com"></div>
+      <div><label>Password</label><input id="su_pass" type="password"></div>
+      <button onclick="signup()">Create organization</button>
+    </div>
+    <div id="loginForm" class="stack">
+      <div><label>Email</label><input id="li_email" type="email"></div>
+      <div><label>Password</label><input id="li_pass" type="password"></div>
+      <button onclick="login()">Log in</button>
+    </div>
+    <p id="authErr" class="muted" style="color:var(--bad)"></p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appView" class="wrap hide">
+  <aside class="stack">
+    <div class="card">
+      <h2>New request</h2>
+      <div class="stack">
+        <div>
+          <label>Customer</label>
+          <select id="rq_customer"></select>
+          <button class="ghost sm" onclick="toggle('newCustomer')">+ New customer</button>
+        </div>
+        <div id="newCustomer" class="hide">
+          <input id="nc_name" placeholder="Full name">
+          <input id="nc_email" placeholder="Email">
+          <input id="nc_phone" placeholder="Phone (optional)">
+          <button class="sm" onclick="addCustomer()">Save customer</button>
+        </div>
+        <div><label>Request title</label><input id="rq_title" placeholder="Mortgage application — documents"></div>
+        <div><label>Checklist template</label><select id="rq_template" onchange="loadTemplateItems()"></select></div>
+        <div><label>Checklist items (one per line)</label>
+          <textarea id="rq_items" rows="5" placeholder="Photo ID&#10;Latest 3 payslips&#10;3 months bank statements&#10;Proof of address"></textarea>
+        </div>
+        <div><label>Due date</label><input id="rq_due" type="date"></div>
+        <button onclick="createRequest()">Create secure request</button>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Navigation</h2>
+      <div class="stack">
+        <button class="ghost" style="width:100%" onclick="view('requests')">Requests</button>
+        <button class="ghost" style="width:100%" onclick="view('audit')">Audit log</button>
+        <button class="ghost" style="width:100%" onclick="logout()">Log out</button>
+      </div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="createdLink" class="card hide" style="margin-bottom:16px;background:#f0f9ff;border-color:#bae6fd">
+      <h2 style="color:#0369a1">Request created — share this with the borrower</h2>
+      <div class="linkbox" id="createdLinkText"></div>
+      <p class="muted">Identity code (send by SMS/email out-of-band): <b id="createdOtp"></b> ·
+         <a id="createdOpen" target="_blank">Open borrower portal ↗</a></p>
+    </div>
+
+    <div id="requestsView" class="card">
+      <h2>Document requests</h2>
+      <table><thead><tr><th>Customer</th><th>Title</th><th>Progress</th><th>Status</th><th></th></tr></thead>
+        <tbody id="requestsBody"></tbody></table>
+    </div>
+
+    <div id="detailView" class="card hide stack"></div>
+
+    <div id="auditView" class="card hide">
+      <h2>Audit log</h2>
+      <table><thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Detail</th></tr></thead>
+        <tbody id="auditBody"></tbody></table>
+    </div>
+  </main>
+</div>
+
+<script src="/lender/app.js"></script>
+</body>
+</html>

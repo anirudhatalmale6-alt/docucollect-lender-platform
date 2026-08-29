@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Secure Document Upload</title>
+<style>
+  :root { --brand:#2563eb; --ink:#0f172a; --muted:#64748b; --line:#e5e7eb; --ok:#16a34a; --bad:#dc2626; --warn:#d97706; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; color:var(--ink); background:#f1f5f9; }
+  .top { background:var(--brand); color:#fff; padding:18px 18px; }
+  .top .org { font-weight:800; font-size:18px; }
+  .top .sub { opacity:.9; font-size:13px; margin-top:2px; }
+  .screen { max-width:480px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
+  h3 { margin:0 0 4px; font-size:16px; }
+  .muted { color:var(--muted); font-size:13.5px; }
+  button { width:100%; background:var(--brand); color:#fff; border:0; padding:13px; border-radius:10px; font-weight:700; font-size:15px; cursor:pointer; }
+  button.sec { background:#eef2ff; color:var(--brand); }
+  input[type=text], input[type=number] { width:100%; padding:13px; border:1px solid var(--line); border-radius:10px; font-size:16px; letter-spacing:3px; text-align:center; }
+  .pill { display:inline-block; padding:3px 10px; border-radius:999px; font-size:12px; font-weight:700; }
+  .p-pending { background:#f1f5f9; color:#64748b; } .p-uploaded { background:#fff7ed; color:#b45309; }
+  .p-accepted { background:#f0fdf4; color:#15803d; } .p-rejected { background:#fef2f2; color:#b91c1c; }
+  .item { border-top:1px solid var(--line); padding:14px 0; }
+  .item:first-child { border-top:0; }
+  .row { display:flex; gap:10px; align-items:center; justify-content:space-between; }
+  .hide { display:none !important; }
+  .filebtns { display:flex; gap:10px; margin-top:10px; }
+  .filebtns label { flex:1; text-align:center; background:#eef2ff; color:var(--brand); padding:11px; border-radius:10px; font-weight:700; font-size:14px; cursor:pointer; }
+  .note { background:#fef2f2; color:#b91c1c; padding:8px 10px; border-radius:8px; font-size:13px; margin-top:8px; }
+  .done { background:#f0fdf4; color:#15803d; padding:8px 10px; border-radius:8px; font-size:13px; margin-top:8px; }
+  .progress { font-size:13px; color:var(--muted); margin-top:6px; }
+  .lock { text-align:center; padding:20px 0; }
+  .lock .icon { font-size:34px; }
+</style>
+</head>
+<body>
+<div class="top">
+  <div class="org" id="orgName">…</div>
+  <div class="sub" id="subLine"></div>
+</div>
+<div class="screen">
+
+  <!-- Verify -->
+  <div id="verifyCard" class="card hide">
+    <div class="lock">
+      <div class="icon">🔒</div>
+      <h3>Verify it's you</h3>
+      <p class="muted" id="verifyHello"></p>
+    </div>
+    <input id="otp" type="number" inputmode="numeric" placeholder="6-digit code">
+    <p class="muted" style="text-align:center">Enter the code your lender sent you.</p>
+    <button onclick="verify()">Verify &amp; continue</button>
+    <p id="verifyErr" class="muted" style="color:var(--bad);text-align:center"></p>
+  </div>
+
+  <!-- Checklist -->
+  <div id="listCard" class="hide">
+    <div class="card">
+      <h3 id="reqTitle"></h3>
+      <div class="progress" id="overallProgress"></div>
+    </div>
+    <div class="card" id="itemsCard"></div>
+    <div class="card">
+      <h3>Questions?</h3>
+      <div id="msgs" class="muted" style="margin-bottom:8px"></div>
+      <div class="row">
+        <input id="msgBody" type="text" style="letter-spacing:normal;text-align:left" placeholder="Message your lender…">
+      </div>
+      <button class="sec" style="margin-top:8px" onclick="sendMsg()">Send message</button>
+    </div>
+  </div>
+
+  <div id="badLink" class="card hide"><h3>Link not found</h3><p class="muted">This upload link is invalid or has expired. Please contact your lender.</p></div>
+</div>
+
+<script>
+const token = location.pathname.split('/b/')[1];
+const $ = id => document.getElementById(id);
+const api = async (path, opts={}) => {
+  const res = await fetch('/api/b/' + token + path, { credentials:'same-origin', ...opts });
+  if (!res.ok) throw await res.json().catch(()=>({error:res.statusText}));
+  return res.json();
+};
+
+async function boot() {
+  let info;
+  try { info = await api(''); } catch { return $('badLink').classList.remove('hide'); }
+  document.documentElement.style.setProperty('--brand', info.org.brand_color || '#2563eb');
+  $('orgName').textContent = info.org.name;
+  $('subLine').textContent = 'Secure document request';
+  $('verifyHello').textContent = `Hi ${info.customer_name}, ${info.org.name} has requested some documents.`;
+  if (info.otp_verified) { showList(); } else { $('verifyCard').classList.remove('hide'); }
+}
+
+async function verify() {
+  try {
+    await api('/verify', { method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ code: $('otp').value }) });
+    $('verifyCard').classList.add('hide');
+    showList();
+  } catch { $('verifyErr').textContent = 'That code did not match. Try again.'; }
+}
+
+async function showList() {
+  $('listCard').classList.remove('hide');
+  const data = await api('/items');
+  $('reqTitle').textContent = data.title;
+  const done = data.items.filter(i => i.status==='accepted').length;
+  const up = data.items.filter(i => i.status==='uploaded').length;
+  $('overallProgress').textContent = `${done} accepted · ${up} in review · ${data.items.length} total`;
+  $('itemsCard').innerHTML = data.items.map(renderItem).join('');
+  loadMsgs();
+}
+
+function renderItem(it) {
+  const canUpload = it.status !== 'accepted';
+  return `<div class="item">
+    <div class="row">
+      <div><b>${it.label}</b>${it.required?' <span class="muted">(required)</span>':''}
+        ${it.hint?`<div class="muted">${it.hint}</div>`:''}</div>
+      <span class="pill p-${it.status}">${it.status}</span>
+    </div>
+    ${it.filename?`<div class="done">Uploaded: ${it.filename} (v${it.version})</div>`:''}
+    ${it.status==='rejected'&&it.review_note?`<div class="note">Please re-upload: ${it.review_note}</div>`:''}
+    ${canUpload?`<div class="filebtns">
+      <label>📷 Take photo
+        <input type="file" accept="image/*" capture="environment" class="hide" onchange="uploadFile('${it.id}', this)">
+      </label>
+      <label>📁 Choose file
+        <input type="file" accept="image/*,application/pdf" class="hide" onchange="uploadFile('${it.id}', this)">
+      </label>
+    </div><div class="progress" id="prog-${it.id}"></div>`:''}
+  </div>`;
+}
+
+async function uploadFile(itemId, input) {
+  const file = input.files[0]; if (!file) return;
+  const prog = $('prog-'+itemId); prog.textContent = 'Uploading…';
+  const fd = new FormData(); fd.append('file', file);
+  try {
+    const out = await api('/items/'+itemId+'/upload', { method:'POST', body: fd });
+    prog.textContent = `Uploaded (v${out.version}) · virus scan: ${out.scan_status}`;
+    await showList();
+  } catch (e) {
+    prog.textContent = e.error === 'malware_detected' ? '⚠ Blocked: file failed the malware scan.'
+      : e.error === 'no_file_or_bad_type' ? '⚠ Unsupported file type.' : '⚠ Upload failed.';
+  }
+}
+
+async function loadMsgs() {
+  const rows = await api('/messages');
+  $('msgs').innerHTML = rows.map(m => `<div><b>${m.sender_name}</b>: ${m.body}</div>`).join('') || 'No messages yet.';
+}
+async function sendMsg() {
+  const body = $('msgBody').value.trim(); if (!body) return;
+  await api('/messages', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ body }) });
+  $('msgBody').value=''; loadMsgs();
+}
+
+boot();
+</script>
+</body>
+</html>
